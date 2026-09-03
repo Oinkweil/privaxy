@@ -12,7 +12,8 @@ impl WildMatchCollection {
             patterns
                 .into_iter()
                 .map(|pattern| {
-                    WildMatch::new(&pattern.to_lowercase())
+                    let pattern_lowercase = pattern.to_lowercase();
+                    WildMatch::new(&pattern_lowercase)
                 })
                 .collect(),
         )
@@ -71,7 +72,140 @@ lazy_static! {
 
 pub fn recommended_exclusions() -> &'static [&'static str] {
     &[
-        // keep your existing list unchanged here
+        "openai.com",
+        "*.openai.com",
+        "chatgpt.com",
+        "*.chatgpt.com",
+        "claude.ai",
+        "*.claude.ai",
+        "openrouter.ai",
+        "*.openrouter.ai",
+        "awswaf.com",
+        "*.awswaf.com",
+        "check.ddos-guard.net",
+        "okta.com",
+        "*.okta.com",
+        "capitalone.com",
+        "*.capitalone.com",
+        "americanexpress.com",
+        "*.americanexpress.com",
+        "experian.com",
+        "*.experian.com",
+        "marcus.com",
+        "*.marcus.com",
+        "fidelity.com",
+        "*.fidelity.com",
+        "fmr.com",
+        "*.fmr.com",
+        "robinhood.com",
+        "*.robinhood.com",
+        "webull.com",
+        "*.webull.com",
+        "webullfintech.com",
+        "*.webullfintech.com",
+        "tradingview.com",
+        "*.tradingview.com",
+        "stripecdn.com",
+        "*.stripecdn.com",
+        "squarecdn.com",
+        "*.squarecdn.com",
+        "cashappapi.com",
+        "*.cashappapi.com",
+        "mega.nz",
+        "*.mega.nz",
+        "mega.co.nz",
+        "*.mega.co.nz",
+        "homedepot.com",
+        "*.homedepot.com",
+        "pizzahut.com",
+        "*.pizzahut.com",
+        "amazon.com",
+        "*.amazon.com",
+        "amazonaws.com",
+        "*.amazonaws.com",
+        "amazontrust.com",
+        "*.amazontrust.com",
+        "instagram.com",
+        "*.instagram.com",
+        "facebook.com",
+        "*.facebook.com",
+        "snapchat.com",
+        "*.snapchat.com",
+        "signal.org",
+        "*.signal.org",
+        "proton.me",
+        "*.proton.me",
+        "protonmail.com",
+        "*.protonmail.com",
+        "twitter.com",
+        "*.twitter.com",
+        "x.com",
+        "*.x.com",
+        "discord.com",
+        "*.discord.com",
+        "discord.gg",
+        "*.discord.gg",
+        "discordapp.com",
+        "*.discordapp.com",
+        "t-mobile.com",
+        "*.t-mobile.com",
+        "fedex.com",
+        "*.fedex.com",
+        "ups.com",
+        "*.ups.com",
+        "privateinternetaccess.com",
+        "*.privateinternetaccess.com",
+        "microsoft.com",
+        "*.microsoft.com",
+        "microsoftonline.com",
+        "*.microsoftonline.com",
+        "live.com",
+        "*.live.com",
+        "xboxlive.com",
+        "*.xboxlive.com",
+        "xbox.com",
+        "*.xbox.com",
+        "clients1.google.com",
+        "clients2.google.com",
+        "clients3.google.com",
+        "clients4.google.com",
+        "clients5.google.com",
+        "steam.com",
+        "*.steam.com",
+        "steamcommunity.com",
+        "*.steamcommunity.com",
+        "steampowered.com",
+        "*.steampowered.com",
+        "steamcontent.com",
+        "*.steamcontent.com",
+        "steamstatic.com",
+        "*.steamstatic.com",
+        "tidal.com",
+        "*.tidal.com",
+        "soundcloud.com",
+        "*.soundcloud.com",
+        "smsl-audio.com",
+        "*.smsl-audio.com",
+        "sourceforge.net",
+        "*.sourceforge.net",
+        "cdnjs.cloudflare.com",
+        "challenges.cloudflare.com",
+        "digicert.com",
+        "*.digicert.com",
+        "verisign.com",
+        "*.verisign.com",
+        "github.com",
+        "*.github.com",
+        "githubassets.com",
+        "*.githubassets.com",
+        "uber.com",
+        "*.uber.com",
+        "bitcoingold.org",
+        "*.bitcoingold.org",
+        "btcgpu.org",
+        "*.btcgpu.org",
+        "newsedge.net",
+        "*.newsedge.net",
     ]
 }
 
@@ -83,28 +217,29 @@ pub struct LocalExclusionStore {
 
 impl LocalExclusionStore {
     pub fn new(patterns: Vec<String>, mode: MitmMode) -> Self {
+        let collection = WildMatchCollection::new(patterns);
+
         Self {
-            patterns: Arc::new(RwLock::new(
-                WildMatchCollection::new(patterns),
-            )),
+            patterns: Arc::new(RwLock::new(collection)),
             mode,
         }
     }
 
     pub fn replace_exclusions(&mut self, patterns: Vec<String>) {
-        *self.patterns.write().unwrap() =
-            WildMatchCollection::new(patterns);
+        let collection = WildMatchCollection::new(patterns);
+
+        *self.patterns.write().unwrap() = collection;
     }
 
-    /// Returns true when this host should be MITM inspected.
+    /// Returns whether this host should be MITM inspected.
     ///
     /// Inclusion mode:
-    ///     match     -> MITM + filtering
-    ///     no match  -> blind tunnel
+    ///     match -> MITM + filtering
+    ///     no match -> blind tunnel
     ///
     /// Exclusion mode:
-    ///     match     -> blind tunnel
-    ///     no match  -> MITM + filtering
+    ///     match -> blind tunnel
+    ///     no match -> MITM + filtering
     pub fn contains(&self, host: &str) -> bool {
         let matched = self.patterns.read().unwrap().is_match(host);
 
