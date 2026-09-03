@@ -26,6 +26,23 @@ pub(crate) const CONFIGURATION_FILE_NAME: &str = "config";
 /// Default configuration directory name.
 const CONFIGURATION_DIRECTORY_NAME: &str = "/etc/privaxy";
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum MitmMode {
+    /// Normal Privaxy behaviour:
+    /// the exclusions list contains hosts which bypass MITM.
+    Exclusion,
+
+    /// Gateway behaviour:
+    /// the exclusions list contains hosts which should be MITMed.
+    Inclusion,
+}
+
+impl Default for MitmMode {
+    fn default() -> Self {
+        MitmMode::Exclusion
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ConfigurationError {
     #[error("NetworkConfigError error: {0}")]
@@ -55,6 +72,10 @@ pub enum ConfigurationError {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Configuration {
     pub exclusions: BTreeSet<String>,
+
+    #[serde(default)]
+    pub mitm_mode: MitmMode,
+
     pub custom_filters: Vec<String>,
     pub ca: Ca,
     pub network: NetworkConfig,
@@ -64,7 +85,6 @@ pub struct Configuration {
     #[serde(default)]
     pub debug: DebugConfig,
 }
-
 /// Opt-in diagnostics. Off by default — these add visible/observable behavior to
 /// proxied pages, so they should only be enabled while troubleshooting.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -131,9 +151,6 @@ impl Configuration {
         }
     }
 
-    /// Populate `auth.api_key` and `auth.session_signing_key` if missing
-    /// (e.g. legacy config from before auth was added). Returns true if any
-    /// change was made and the caller should persist the configuration.
     fn ensure_auth_keys(&mut self) -> bool {
         let mut changed = false;
         if self.auth.api_key.is_empty() {
@@ -152,10 +169,6 @@ impl Configuration {
 
         let configuration_serialized = toml::to_string_pretty(&self)?;
 
-        // Write to a temporary file in the same directory, then atomically
-        // rename it over the target. This guarantees the live config is never
-        // observed in a half-written state: readers see either the old file or
-        // the fully-written new one, even if the process crashes mid-write.
         let temp_file_path = get_base_directory()?.join(format!(
             "{CONFIGURATION_FILE_NAME}.{}.tmp",
             generate_random_hex(8)
@@ -191,7 +204,6 @@ impl Configuration {
             .filter_map(|s_| {
                 let s_ = s_.trim();
 
-                // Removing empty lines
                 if s_.is_empty() {
                     None
                 } else {
@@ -290,6 +302,7 @@ impl Configuration {
             log::error!("Failed to validate network settings: {err}");
             return Err(err);
         };
+
         self.network = network_config.clone();
         Ok(())
     }
@@ -299,6 +312,7 @@ impl Configuration {
             log::error!("Failed to validate ca settings: {err}");
             return Err(err);
         };
+
         self.ca = ca_config.clone();
         Ok(())
     }
@@ -315,18 +329,21 @@ impl Configuration {
             .to_string();
 
         let default_filters = DefaultFilters::new();
+
         Ok(Configuration {
             filters: default_filters
                 .list()
                 .into_iter()
                 .map(|filter| filter.into())
                 .collect(),
+
             ca: Ca {
                 ca_certificate: Some(x509_pem),
                 ca_certificate_path: None,
                 ca_private_key: Some(private_key_pem),
                 ca_private_key_path: None,
             },
+
             network: NetworkConfig {
                 bind_addr: "0.0.0.0".to_string(),
                 proxy_port: 8100,
@@ -342,11 +359,15 @@ impl Configuration {
                 pac_direct_fqdns: Vec::new(),
                 doh: DohConfig::default(),
             },
+
             exclusions: BTreeSet::from_iter(
                 recommended_exclusions()
                     .iter()
                     .map(|entry| entry.to_string()),
             ),
+
+            mitm_mode: MitmMode::default(),
+
             custom_filters: Vec::new(),
             auth: Auth::new_initialized(),
             debug: DebugConfig::default(),
@@ -361,9 +382,9 @@ pub(crate) fn get_config_file() -> PathBuf {
 fn get_base_directory() -> ConfigurationResult<PathBuf> {
     let base_directory: PathBuf = match env::var("PRIVAXY_BASE_PATH") {
         Ok(val) => PathBuf::from(&val),
-        // Assume home directory
         Err(_) => PathBuf::from(CONFIGURATION_DIRECTORY_NAME),
     };
+
     match Path::exists(&base_directory) {
         true => Ok(base_directory),
         false => Err(ConfigurationError::DirectoryNotFound),
