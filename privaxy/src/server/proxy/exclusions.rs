@@ -1,3 +1,4 @@
+use crate::configuration::MitmMode;
 use lazy_static::lazy_static;
 use std::sync::{Arc, RwLock};
 use wildmatch::WildMatch;
@@ -209,26 +210,42 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalExclusionStore(Arc<RwLock<WildMatchCollection>>);
+pub struct LocalExclusionStore {
+    patterns: Arc<RwLock<WildMatchCollection>>,
+    mode: MitmMode,
+}
 
 impl LocalExclusionStore {
-    pub fn new(inclusions: Vec<String>) -> Self {
-        let collection = WildMatchCollection::new(inclusions);
-        Self(Arc::new(RwLock::new(collection)))
+    pub fn new(patterns: Vec<String>, mode: MitmMode) -> Self {
+        let collection = WildMatchCollection::new(patterns);
+
+        Self {
+            patterns: Arc::new(RwLock::new(collection)),
+            mode,
+        }
     }
 
-    pub fn replace_exclusions(&mut self, inclusions: Vec<String>) {
-        let new_store = LocalExclusionStore::new(inclusions);
+    pub fn replace_exclusions(&mut self, patterns: Vec<String>) {
+        let collection = WildMatchCollection::new(patterns);
 
-        *self.0.write().unwrap() =
-            new_store.0.read().unwrap().clone();
+        *self.patterns.write().unwrap() = collection;
     }
 
-    /// In this fork the old exclusion list becomes an inclusion list.
+    /// Returns whether this host should be MITM inspected.
     ///
-    /// true  -> MITM + filtering
-    /// false -> blind tunnel
+    /// Inclusion mode:
+    ///     match -> MITM + filtering
+    ///     no match -> blind tunnel
+    ///
+    /// Exclusion mode:
+    ///     match -> blind tunnel
+    ///     no match -> MITM + filtering
     pub fn contains(&self, host: &str) -> bool {
-        self.0.read().unwrap().is_match(host)
+        let matched = self.patterns.read().unwrap().is_match(host);
+
+        match self.mode {
+            MitmMode::Inclusion => matched,
+            MitmMode::Exclusion => !matched,
+        }
     }
 }
