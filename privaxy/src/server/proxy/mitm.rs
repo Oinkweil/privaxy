@@ -110,7 +110,7 @@ pub(crate) async fn serve_mitm_session(
     } else if {
         let matches_list = local_exclusion_store.contains(authority.host());
 
-        llet should_mitm = local_exclusion_store.contains(authority.host());
+        let should_mitm = local_exclusion_store.contains(authority.host());
 
         !should_mitm && req.headers().contains_key(http::header::UPGRADE)
     } {
