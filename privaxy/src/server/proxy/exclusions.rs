@@ -11,8 +11,6 @@ impl WildMatchCollection {
             patterns
                 .into_iter()
                 .map(|pattern| {
-                    // Making things case insensitive
-
                     let pattern_lowercase = pattern.to_lowercase();
                     WildMatch::new(&pattern_lowercase)
                 })
@@ -21,7 +19,6 @@ impl WildMatchCollection {
     }
 
     fn is_match(&self, element: &str) -> bool {
-        // Making things case insensitive
         let lowercase_element = element.to_lowercase();
 
         self.0
@@ -34,11 +31,6 @@ lazy_static! {
     static ref DEFAULT_EXCLUSIONS: WildMatchCollection = {
         let mut exclusions = Vec::new();
 
-        // Apple service exclusions, as defined in : https://support.apple.com/en-us/HT210060
-        // > Apple services will fail any connection that uses
-        // > HTTPS Interception (SSL Inspection). If the HTTPS traffic
-        // > traverses a web proxy, disable HTTPS Interception for the hosts
-        // > listed in this article.
         exclusions.push(String::from("*.apple.com"));
         exclusions.push(String::from("static.ips.apple.com"));
         exclusions.push(String::from("*.push.apple.com"));
@@ -77,14 +69,8 @@ lazy_static! {
     };
 }
 
-/// Hosts the maintainer has observed to use certificate pinning, HSTS preload
-/// + strict TLS, or otherwise break under MITM interception. Exposed to the
-/// web UI via the "Reset to defaults" button so users can opt in by populating
-/// their own exclusions list. These are NOT applied automatically — see
-/// `DEFAULT_EXCLUSIONS` above for the always-on Apple safety net.
 pub fn recommended_exclusions() -> &'static [&'static str] {
     &[
-        // AI providers
         "openai.com",
         "*.openai.com",
         "chatgpt.com",
@@ -93,14 +79,11 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.claude.ai",
         "openrouter.ai",
         "*.openrouter.ai",
-        // AWS WAF / DDoS providers
         "awswaf.com",
         "*.awswaf.com",
         "check.ddos-guard.net",
-        // Identity / SSO
         "okta.com",
         "*.okta.com",
-        // Banking / brokerage / payments
         "capitalone.com",
         "*.capitalone.com",
         "americanexpress.com",
@@ -127,36 +110,26 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.squarecdn.com",
         "cashappapi.com",
         "*.cashappapi.com",
-        // Mega
         "mega.nz",
         "*.mega.nz",
         "mega.co.nz",
         "*.mega.co.nz",
-        // Retail / restaurants
         "homedepot.com",
         "*.homedepot.com",
         "pizzahut.com",
         "*.pizzahut.com",
-        // Amazon
         "amazon.com",
         "*.amazon.com",
         "amazonaws.com",
         "*.amazonaws.com",
         "amazontrust.com",
         "*.amazontrust.com",
-        // Social / messaging
         "instagram.com",
         "*.instagram.com",
         "facebook.com",
         "*.facebook.com",
         "snapchat.com",
         "*.snapchat.com",
-        "snap.com",
-        "*.snap.com",
-        "snap.co",
-        "*.snap.co",
-        "sc-cdn.net",
-        "*.sc-cdn.net",
         "signal.org",
         "*.signal.org",
         "proton.me",
@@ -167,30 +140,20 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.twitter.com",
         "x.com",
         "*.x.com",
-        "t.co",
-        "x.co",
-        "wechat.com",
-        "*.wechat.com",
         "discord.com",
         "*.discord.com",
         "discord.gg",
         "*.discord.gg",
         "discordapp.com",
         "*.discordapp.com",
-        "discordstatus.com",
-        "bumble.com",
-        "*.bumble.com",
-        // Carriers / shipping
         "t-mobile.com",
         "*.t-mobile.com",
         "fedex.com",
         "*.fedex.com",
         "ups.com",
         "*.ups.com",
-        // VPN
         "privateinternetaccess.com",
         "*.privateinternetaccess.com",
-        // Microsoft / Xbox / Windows
         "microsoft.com",
         "*.microsoft.com",
         "microsoftonline.com",
@@ -201,16 +164,11 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.xboxlive.com",
         "xbox.com",
         "*.xbox.com",
-        "ctldl.windowsupdate.com",
-        "crl.microsoft.com",
-        "clientconfig.passport.net",
-        // Google client config (used by Chrome / browser cert pinning)
         "clients1.google.com",
         "clients2.google.com",
         "clients3.google.com",
         "clients4.google.com",
         "clients5.google.com",
-        // Steam
         "steam.com",
         "*.steam.com",
         "steamcommunity.com",
@@ -221,9 +179,6 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.steamcontent.com",
         "steamstatic.com",
         "*.steamstatic.com",
-        "steamserver.net",
-        "*.steamserver.net",
-        // Media / audio
         "tidal.com",
         "*.tidal.com",
         "soundcloud.com",
@@ -232,20 +187,16 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
         "*.smsl-audio.com",
         "sourceforge.net",
         "*.sourceforge.net",
-        // Cloudflare-fronted strict TLS endpoints
         "cdnjs.cloudflare.com",
         "challenges.cloudflare.com",
-        // Certificate authorities
         "digicert.com",
         "*.digicert.com",
         "verisign.com",
         "*.verisign.com",
-        // GitHub
         "github.com",
         "*.github.com",
         "githubassets.com",
         "*.githubassets.com",
-        // Misc cert-pinned hosts
         "uber.com",
         "*.uber.com",
         "bitcoingold.org",
@@ -261,22 +212,23 @@ pub fn recommended_exclusions() -> &'static [&'static str] {
 pub struct LocalExclusionStore(Arc<RwLock<WildMatchCollection>>);
 
 impl LocalExclusionStore {
-    pub fn new(exclusions: Vec<String>) -> Self {
-        let collection = WildMatchCollection::new(exclusions);
+    pub fn new(inclusions: Vec<String>) -> Self {
+        let collection = WildMatchCollection::new(inclusions);
         Self(Arc::new(RwLock::new(collection)))
     }
 
-    pub fn replace_exclusions(&mut self, exclusions: Vec<String>) {
-        let new_exclusion_store = LocalExclusionStore::new(exclusions);
+    pub fn replace_exclusions(&mut self, inclusions: Vec<String>) {
+        let new_store = LocalExclusionStore::new(inclusions);
 
-        *self.0.write().unwrap() = new_exclusion_store.0.read().unwrap().clone();
+        *self.0.write().unwrap() =
+            new_store.0.read().unwrap().clone();
     }
 
-    pub fn contains(&self, element: &str) -> bool {
-        if DEFAULT_EXCLUSIONS.is_match(element) {
-            true
-        } else {
-            self.0.read().unwrap().is_match(element)
-        }
+    /// In this fork the old exclusion list becomes an inclusion list.
+    ///
+    /// true  -> MITM + filtering
+    /// false -> blind tunnel
+    pub fn contains(&self, host: &str) -> bool {
+        self.0.read().unwrap().is_match(host)
     }
 }
