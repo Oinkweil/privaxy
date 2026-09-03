@@ -423,6 +423,7 @@ async fn privaxy_backend(
                     statistics.clone(),
                     client_ip_address,
                     local_exclusion_store.clone(),
+                    configuration.mitm_mode.clone(),
                     doh_config.clone(),
                     scriptlet_debug_logging,
                 )
