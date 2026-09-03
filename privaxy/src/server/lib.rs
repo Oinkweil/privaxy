@@ -131,7 +131,10 @@ pub async fn start_privaxy() -> PrivaxyServer {
     log_handle.set_level(configuration.debug.log_level.to_level_filter());
 
     let local_exclusion_store =
-        LocalExclusionStore::new(Vec::from_iter(configuration.exclusions.clone().into_iter()));
+        LocalExclusionStore::new(
+            Vec::from_iter(configuration.exclusions.clone().into_iter()),
+            configuration.mitm_mode.clone(),
+        );
     let local_exclusion_store_clone = local_exclusion_store.clone();
 
     let ca_certificate = match configuration.ca.get_ca_certificate().await {
