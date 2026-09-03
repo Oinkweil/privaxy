@@ -39,7 +39,7 @@ pub enum MitmMode {
 
 impl Default for MitmMode {
     fn default() -> Self {
-        MitmMode::Exclusion
+        MitmMode::Inclusion
     }
 }
 
@@ -366,7 +366,7 @@ impl Configuration {
                     .map(|entry| entry.to_string()),
             ),
 
-            mitm_mode: MitmMode::default(),
+            mitm_mode: MitmMode::Inclusion,
 
             custom_filters: Vec::new(),
             auth: Auth::new_initialized(),
