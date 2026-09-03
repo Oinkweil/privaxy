@@ -31,7 +31,6 @@ pub(crate) async fn serve_mitm_session(
     statistics: Statistics,
     client_ip_address: IpAddr,
     local_exclusion_store: LocalExclusionStore,
-    mitm_mode: MitmMode,
     doh_config: DohConfig,
     scriptlet_debug_logging: bool,
 ) -> Result<Response<Body>, hyper::Error> {
