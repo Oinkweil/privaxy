@@ -9,16 +9,23 @@ use warp::filters::BoxedFilter;
 use warp::http::StatusCode;
 use warp::Filter as RouteFilter;
 
+/// These are the default hosts placed into the MITM inclusion list.
+/// The frontend still calls this "defaults" for compatibility.
 async fn get_default_exclusions() -> Result<Box<dyn warp::Reply>, Infallible> {
     let defaults = recommended_exclusions().join("\n");
     Ok(Box::new(warp::reply::json(&defaults)))
 }
 
+/// Return the current MITM inclusion list.
+///
+/// Despite the historical name "exclusions", these entries are now the
+/// domains that SHOULD be intercepted and filtered. Hosts not present
+/// in this list are blindly tunnelled.
 async fn get_exclusions() -> Result<Box<dyn warp::Reply>, Infallible> {
     let configuration = match Configuration::read_from_home().await {
         Ok(configuration) => configuration,
         Err(err) => {
-            log::error!("Failed to get exclusions: {err}");
+            log::error!("Failed to get MITM inclusion list: {err}");
             return Ok(Box::new(get_error_response(err)));
         }
     };
@@ -28,6 +35,7 @@ async fn get_exclusions() -> Result<Box<dyn warp::Reply>, Infallible> {
     Ok(Box::new(warp::reply::json(&exclusions)))
 }
 
+/// Replace the MITM inclusion list.
 async fn put_exclusions(
     exclusions: String,
     configuration_updater_sender: Sender<Configuration>,
@@ -39,7 +47,7 @@ async fn put_exclusions(
     let mut configuration = match Configuration::read_from_home().await {
         Ok(configuration) => configuration,
         Err(err) => {
-            log::error!("Failed to put exclusions: {err}");
+            log::error!("Failed to put MITM inclusion list: {err}");
             return Ok(Box::new(get_error_response(err)));
         }
     };
