@@ -55,10 +55,7 @@ pub(crate) async fn serve_mitm_session(
                 Ok(mut upgraded) => {
                     let matches_list = local_exclusion_store.contains(authority.host());
 
-                    let should_mitm = match mitm_mode {
-                        MitmMode::Exclusion => !matches_list,
-                        MitmMode::Inclusion => matches_list,
-                    };
+                    let should_mitm = local_exclusion_store.should_mitm(authority.host());
 
                     if !should_mitm {
                         let _result = tunnel(&mut upgraded, &authority).await;
