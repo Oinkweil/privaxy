@@ -1,6 +1,9 @@
 use super::{exclusions::LocalExclusionStore, serve::serve};
 use crate::{
-    blocker::AdblockRequester, cert::CertCache, configuration::DohConfig, statistics::Statistics,
+    blocker::AdblockRequester,
+    cert::CertCache,
+    configuration::{DohConfig, MitmMode},
+    statistics::Statistics,
     Event,
 };
 use http::uri::{Authority, Scheme};
@@ -28,6 +31,7 @@ pub(crate) async fn serve_mitm_session(
     statistics: Statistics,
     client_ip_address: IpAddr,
     local_exclusion_store: LocalExclusionStore,
+    mitm_mode: MitmMode,
     doh_config: DohConfig,
     scriptlet_debug_logging: bool,
 ) -> Result<Response<Body>, hyper::Error> {
@@ -50,14 +54,15 @@ pub(crate) async fn serve_mitm_session(
         tokio::task::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(mut upgraded) => {
-                    // Inclusion list logic:
-                    // true  -> MITM + filtering
-                    // false -> blind tunnel
-                    let should_mitm = local_exclusion_store.contains(authority.host());
+                    let matches_list = local_exclusion_store.contains(authority.host());
+
+                    let should_mitm = match mitm_mode {
+                        MitmMode::Exclusion => !matches_list,
+                        MitmMode::Inclusion => matches_list,
+                    };
 
                     if !should_mitm {
                         let _result = tunnel(&mut upgraded, &authority).await;
-
                         return;
                     }
 
@@ -94,7 +99,7 @@ pub(crate) async fn serve_mitm_session(
                             if error.kind() == std::io::ErrorKind::UnexpectedEof {
                                 log::warn!(
                                     "Unable to perform handshake for host: {}. \
-                                     Consider removing it from the MITM inclusion list.",
+                                     Consider checking the MITM selector list.",
                                     authority
                                 );
                             }
@@ -106,18 +111,22 @@ pub(crate) async fn serve_mitm_session(
         });
 
         Ok(Response::new(Body::empty()))
-    } else if !local_exclusion_store.contains(authority.host())
-        && req.headers().contains_key(http::header::UPGRADE)
-    {
-        // A host outside the MITM inclusion list performing a protocol upgrade
-        // over plain HTTP. Blind tunnel it.
+    } else if {
+        let matches_list = local_exclusion_store.contains(authority.host());
+
+        let should_mitm = match mitm_mode {
+            MitmMode::Exclusion => !matches_list,
+            MitmMode::Inclusion => matches_list,
+        };
+
+        !should_mitm && req.headers().contains_key(http::header::UPGRADE)
+    } {
         tunnel_http_upgrade(req, authority).await
     } else {
         if is_opaque_upgrade(req.headers()) {
             log::warn!(
                 "Proxying opaque protocol-upgrade traffic (MMTLS?) for {}; \
-                 this is unlikely to work through the MITM proxy. \
-                 Consider adding the host to the MITM inclusion list.",
+                 this may require adding the host to the MITM selector list.",
                 authority
             );
         }
@@ -141,8 +150,7 @@ pub(crate) async fn serve_mitm_session(
 /// An HTTP `Upgrade` request whose target protocol is something other than
 /// WebSocket (or h2c) — e.g. WeChat's MMTLS long-link. The proxy can't do
 /// anything useful with such a protocol, and its hyper-based upgrade bridge
-/// can't carry it; these are only handled correctly by blind-tunneling, which
-/// requires the host to be outside the MITM inclusion list.
+/// can't carry it; these are only handled correctly by blind-tunneling.
 fn is_opaque_upgrade(headers: &http::HeaderMap) -> bool {
     headers
         .get(http::header::UPGRADE)
@@ -156,10 +164,9 @@ fn is_opaque_upgrade(headers: &http::HeaderMap) -> bool {
         .unwrap_or(false)
 }
 
-/// Blind-tunnel a plain-HTTP protocol upgrade to a host outside the inclusion
-/// list. The proxied request carries an absolute-form URI; we replay it to the
-/// upstream in origin-form over a raw socket, return our own `101` to the
-/// client, and pipe the opaque bytes both ways.
+/// Blind-tunnel a plain-HTTP protocol upgrade. The proxied request carries an
+/// absolute-form URI; replay it upstream in origin-form and pipe the opaque
+/// bytes both ways.
 async fn tunnel_http_upgrade(
     req: Request<Body>,
     authority: Authority,
